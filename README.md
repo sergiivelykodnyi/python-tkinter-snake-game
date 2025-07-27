@@ -1,3 +1,3 @@
-# Snake game
+# Python Tcl/Tk GUI toolkit applications
 
-Snake game implemented using the Python Tcl/Tk GUI toolkit.
+This repository contains a simple implementation of the classic apps using the Python Tcl/Tk GUI toolkit.
