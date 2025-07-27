@@ -1,184 +1,302 @@
-import tkinter
+"""
+Snake Game implemented with tkinter.
+
+A classic Snake game where the player controls a snake to eat food and grow longer
+while avoiding collisions with walls and the snake's own body.
+"""
+
+from __future__ import annotations
+
 import random
+import tkinter as tk
+from enum import Enum
+from typing import List, Optional
 
 
-# Configuration
-
-ROWS = 25  # Number of rows in the game grid
-COLS = 25  # Number of columns in the game grid
-TILE_SIZE = 25  # Size of each tile in pixels
-
-WINDOW_WIDTH = COLS * TILE_SIZE
-WINDOW_HEIGHT = ROWS * TILE_SIZE
+class Direction(Enum):
+    """Enum representing the four possible movement directions."""
+    UP = (0, -1)
+    DOWN = (0, 1)
+    LEFT = (-1, 0)
+    RIGHT = (1, 0)
 
 
-# Game window setup
+class GameConfig:
+    """Configuration constants for the Snake game."""
+    ROWS: int = 25
+    COLS: int = 25
+    TILE_SIZE: int = 25
+    WINDOW_WIDTH: int = COLS * TILE_SIZE
+    WINDOW_HEIGHT: int = ROWS * TILE_SIZE
+    GAME_SPEED: int = 200  # milliseconds between updates
 
-window = tkinter.Tk()
-window.title("Snake Game")
-window.resizable(False, False)
-canvas = tkinter.Canvas(
-    window,
-    background="black",
-    width=WINDOW_WIDTH,
-    height=WINDOW_HEIGHT,
-    borderwidth=0,
-    highlightthickness=0
-)
-canvas.pack()
-window.update()
+    # Colors
+    BACKGROUND_COLOR: str = "black"
+    SNAKE_COLOR: str = "lime green"
+    FOOD_COLOR: str = "red"
+    TEXT_COLOR: str = "white"
 
-# Center the window on the screen
+    # Fonts
+    GAME_OVER_FONT: tuple[str, int] = ("Arial", 24)
+    SCORE_FONT: tuple[str, int] = ("Arial", 14)
 
-screen_width = window.winfo_screenwidth()
-screen_height = window.winfo_screenheight()
-window_x = (screen_width - WINDOW_WIDTH) // 2
-window_y = (screen_height - WINDOW_HEIGHT) // 2
-
-window.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}+{window_x}+{window_y}")
-
-
-# Game elements
 
 class Tile:
     """Represents a single tile in the game grid."""
 
-    def __init__(self, x, y):
+    def __init__(self, x: int, y: int) -> None:
+        """
+        Initialize a tile with given coordinates.
+
+        Args:
+            x: X coordinate in pixels
+            y: Y coordinate in pixels
+        """
         self.x = x
         self.y = y
 
-
-# Create single tile that is the snake's starting position
-snake = Tile(5 * TILE_SIZE, 5 * TILE_SIZE)
-food = Tile(
-    random.randint(0, COLS - 1) * TILE_SIZE,
-    random.randint(0, ROWS - 1) * TILE_SIZE
-)
-velocity_x = 0
-velocity_y = 0
-snake_body = []  # List to hold the snake's body segments
-game_over = False
-score = 0
+    def __eq__(self, other: object) -> bool:
+        """Check if two tiles have the same position."""
+        if not isinstance(other, Tile):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y
 
 
-def change_direction(event):
-    """Changes the direction of the snake based on key presses."""
-    global velocity_x, velocity_y, game_over
+class SnakeGame:
+    """Main Snake game class handling all game logic and rendering."""
 
-    if game_over:
-        return
+    def __init__(self) -> None:
+        """Initialize the Snake game."""
+        self.config = GameConfig()
+        self._setup_window()
+        self._reset_game()
 
-    if event.keysym == "Up" and velocity_y != 1:
-        velocity_x = 0
-        velocity_y = -1
+    def _setup_window(self) -> None:
+        """Set up the game window and canvas."""
+        self.window = tk.Tk()
+        self.window.title("Snake Game")
+        self.window.resizable(False, False)
 
-    elif event.keysym == "Down" and velocity_y != -1:
-        velocity_x = 0
-        velocity_y = 1
+        self.canvas = tk.Canvas(
+            self.window,
+            background=self.config.BACKGROUND_COLOR,
+            width=self.config.WINDOW_WIDTH,
+            height=self.config.WINDOW_HEIGHT,
+            borderwidth=0,
+            highlightthickness=0
+        )
+        self.canvas.pack()
+        self.window.update()
 
-    elif event.keysym == "Left" and velocity_x != 1:
-        velocity_x = -1
-        velocity_y = 0
+        # Center the window on the screen
+        self._center_window()
 
-    elif event.keysym == "Right" and velocity_x != -1:
-        velocity_x = 1
-        velocity_y = 0
+        # Bind keyboard events
+        self.window.bind("<KeyPress>", self._handle_keypress)
+        self.window.focus_set()  # Ensure window receives key events
 
+    def _center_window(self) -> None:
+        """Center the game window on the screen."""
+        screen_width = self.window.winfo_screenwidth()
+        screen_height = self.window.winfo_screenheight()
+        window_x = (screen_width - self.config.WINDOW_WIDTH) // 2
+        window_y = (screen_height - self.config.WINDOW_HEIGHT) // 2
 
-def move():
-    global snake, food, snake_body, game_over, score
+        self.window.geometry(
+            f"{self.config.WINDOW_WIDTH}x{self.config.WINDOW_HEIGHT}"
+            f"+{window_x}+{window_y}"
+        )
 
-    if game_over:
-        return
+    def _reset_game(self) -> None:
+        """Reset the game to initial state."""
+        self.snake_head = Tile(5 * self.config.TILE_SIZE,
+                               5 * self.config.TILE_SIZE)
+        self.snake_body: List[Tile] = []
+        self.food = self._generate_food()
+        self.direction: Optional[Direction] = None
+        self.game_over = False
+        self.score = 0
 
-    if snake.x < 0 or snake.x >= WINDOW_WIDTH or snake.y < 0 or snake.y >= WINDOW_HEIGHT:
-        game_over = True
-        return
+    def _generate_food(self) -> Tile:
+        """Generate food at a random position that doesn't overlap with the snake."""
+        while True:
+            food_x = random.randint(
+                0, self.config.COLS - 1) * self.config.TILE_SIZE
+            food_y = random.randint(
+                0, self.config.ROWS - 1) * self.config.TILE_SIZE
+            food = Tile(food_x, food_y)
 
-    for tile in snake_body:
-        if snake.x == tile.x and snake.y == tile.y:
-            game_over = True
+            # Ensure food doesn't spawn on snake
+            if food != self.snake_head and food not in self.snake_body:
+                return food
+
+    def _handle_keypress(self, event: tk.Event) -> None:
+        """Handle keyboard input for changing snake direction."""
+        if self.game_over:
+            if event.keysym == "space":
+                self._reset_game()
             return
 
-    # Collision with food
-    if snake.x == food.x and snake.y == food.y:
-        snake_body.append(Tile(food.x, food.y))
-        food.x = random.randint(0, COLS - 1) * TILE_SIZE
-        food.y = random.randint(0, ROWS - 1) * TILE_SIZE
-        score += 1
+        key_to_direction = {
+            "Up": Direction.UP,
+            "Down": Direction.DOWN,
+            "Left": Direction.LEFT,
+            "Right": Direction.RIGHT,
+            "w": Direction.UP,
+            "s": Direction.DOWN,
+            "a": Direction.LEFT,
+            "d": Direction.RIGHT,
+        }
 
-    for i in range(len(snake_body) - 1, -1, -1):
-        tile = snake_body[i]
-        if i == 0:
-            tile.x = snake.x
-            tile.y = snake.y
-        else:
-            prev_tile = snake_body[i - 1]
-            tile.x = prev_tile.x
-            tile.y = prev_tile.y
+        new_direction = key_to_direction.get(event.keysym)
+        if new_direction and self._is_valid_direction_change(new_direction):
+            self.direction = new_direction
 
-    snake.x += velocity_x * TILE_SIZE
-    snake.y += velocity_y * TILE_SIZE
+    def _is_valid_direction_change(self, new_direction: Direction) -> bool:
+        """Check if the direction change is valid (not opposite to current direction)."""
+        if self.direction is None:
+            return True
 
+        opposite_directions = {
+            Direction.UP: Direction.DOWN,
+            Direction.DOWN: Direction.UP,
+            Direction.LEFT: Direction.RIGHT,
+            Direction.RIGHT: Direction.LEFT,
+        }
 
-def draw():
-    """Draws the game elements on the canvas."""
-    global snake, food, snake_body, game_over, score
+        return new_direction != opposite_directions[self.direction]
 
-    move()
+    def _check_wall_collision(self) -> bool:
+        """Check if the snake head collides with the walls."""
+        return (
+            self.snake_head.x < 0 or
+            self.snake_head.x >= self.config.WINDOW_WIDTH or
+            self.snake_head.y < 0 or
+            self.snake_head.y >= self.config.WINDOW_HEIGHT
+        )
 
-    # Clear the canvas
-    canvas.delete("all")
+    def _check_self_collision(self) -> bool:
+        """Check if the snake head collides with its own body."""
+        return self.snake_head in self.snake_body
 
-    # Draw food
-    canvas.create_rectangle(
-        food.x,
-        food.y,
-        food.x + TILE_SIZE,
-        food.y + TILE_SIZE,
-        fill="red"
-    )
+    def _update_snake_position(self) -> None:
+        """Update the snake's position based on current direction."""
+        if self.direction is None:
+            return
 
-    # Draw snake
-    canvas.create_rectangle(
-        snake.x,
-        snake.y,
-        snake.x + TILE_SIZE,
-        snake.y + TILE_SIZE,
-        fill="lime green"
-    )
+        # Move body segments
+        for i in range(len(self.snake_body) - 1, -1, -1):
+            if i == 0:
+                self.snake_body[i].x = self.snake_head.x
+                self.snake_body[i].y = self.snake_head.y
+            else:
+                prev_segment = self.snake_body[i - 1]
+                self.snake_body[i].x = prev_segment.x
+                self.snake_body[i].y = prev_segment.y
 
-    for tile in snake_body:
-        canvas.create_rectangle(
+        # Move head
+        dx, dy = self.direction.value
+        self.snake_head.x += dx * self.config.TILE_SIZE
+        self.snake_head.y += dy * self.config.TILE_SIZE
+
+    def _check_food_collision(self) -> bool:
+        """Check if the snake head collides with food."""
+        return self.snake_head == self.food
+
+    def _handle_food_consumption(self) -> None:
+        """Handle what happens when snake eats food."""
+        # Add new body segment at food position
+        self.snake_body.append(Tile(self.food.x, self.food.y))
+
+        # Generate new food
+        self.food = self._generate_food()
+
+        # Increase score
+        self.score += 1
+
+    def _update_game_state(self) -> None:
+        """Update the game state for one frame."""
+        if self.game_over:
+            return
+
+        # Update snake position
+        self._update_snake_position()
+
+        # Check collisions
+        if self._check_wall_collision() or self._check_self_collision():
+            self.game_over = True
+            return
+
+        # Check food consumption
+        if self._check_food_collision():
+            self._handle_food_consumption()
+
+    def _draw_tile(self, tile: Tile, color: str) -> None:
+        """Draw a single tile on the canvas."""
+        self.canvas.create_rectangle(
             tile.x,
             tile.y,
-            tile.x + TILE_SIZE,
-            tile.y + TILE_SIZE,
-            fill="lime green"
+            tile.x + self.config.TILE_SIZE,
+            tile.y + self.config.TILE_SIZE,
+            fill=color
         )
 
-    if game_over:
-        canvas.create_text(
-            WINDOW_WIDTH // 2,
-            WINDOW_HEIGHT // 2,
-            text=f"Game Over!\nScore: {score}.",
-            fill="white",
-            font=("Arial", 24)
-        )
-    else:
-        canvas.create_text(
-            10,
-            10,
-            text=f"Score: {score}",
-            fill="white",
-            font=("Arial", 14),
-            anchor="nw"
-        )
+    def _draw_game_elements(self) -> None:
+        """Draw all game elements on the canvas."""
+        # Clear canvas
+        self.canvas.delete("all")
 
-    # Redraw screen every 150 milliseconds
-    window.after(150, draw)
+        # Draw food
+        self._draw_tile(self.food, self.config.FOOD_COLOR)
+
+        # Draw snake head
+        self._draw_tile(self.snake_head, self.config.SNAKE_COLOR)
+
+        # Draw snake body
+        for segment in self.snake_body:
+            self._draw_tile(segment, self.config.SNAKE_COLOR)
+
+    def _draw_ui(self) -> None:
+        """Draw the user interface elements."""
+        if self.game_over:
+            self.canvas.create_text(
+                self.config.WINDOW_WIDTH // 2,
+                self.config.WINDOW_HEIGHT // 2,
+                text=f"Game Over!\nScore: {self.score}\n\nPress SPACE to restart.",
+                fill=self.config.TEXT_COLOR,
+                font=self.config.GAME_OVER_FONT,
+                justify=tk.CENTER
+            )
+        else:
+            self.canvas.create_text(
+                10,
+                10,
+                text=f"Score: {self.score}",
+                fill=self.config.TEXT_COLOR,
+                font=self.config.SCORE_FONT,
+                anchor="nw"
+            )
+
+    def _game_loop(self) -> None:
+        """Main game loop that updates and renders the game."""
+        self._update_game_state()
+        self._draw_game_elements()
+        self._draw_ui()
+
+        # Schedule next frame
+        self.window.after(self.config.GAME_SPEED, self._game_loop)
+
+    def run(self) -> None:
+        """Start the game."""
+        self._game_loop()
+        self.window.mainloop()
 
 
-draw()
-window.bind("<KeyPress>", change_direction)
-window.mainloop()
+def main() -> None:
+    """Main function to start the Snake game."""
+    game = SnakeGame()
+    game.run()
+
+
+if __name__ == "__main__":
+    main()

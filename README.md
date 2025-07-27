@@ -1,2 +1,3 @@
-# python-tkinter-snake-game
-Snake game on Python Tcl/Tk GUI toolkit
+# Snake game
+
+Snake game implemented using the Python Tcl/Tk GUI toolkit.
